@@ -12,6 +12,13 @@
 #include <numpy/ndarraytypes.h>
 #include <numpy/arrayobject.h>
 
+
+    //TODO: Do we really need this if we using python???
+    //TODO: try to prevent copy to improve performance
+    //TODO: add clip and norm 0..255 (native not numpy)
+    //TODO: add cast to uint8, check memory leaks
+    //TODO: complete and finilize this module for production
+
 MLModel *mlmodel;
 NSArray *input_shape;
 MLMultiArray * mlinput;
@@ -41,28 +48,6 @@ typedef struct {
  }//func
 
 static PyObject *
-test(PyObject *self, PyObject *args)
-{
-    const char *command;
-    int sts;
-
-    if (!PyArg_ParseTuple(args, "s", &command))
-        return NULL;
-    sts = system(command);
-    return PyLong_FromLong(sts);
-}
-
-test2(PyObject *self, PyObject *args)
-{
-    const char *command;
-    int sts;
-
-    if (!PyArg_ParseTuple(args, "s", &command))
-        return NULL;
-    sts = system(command);
-    return PyUnicode_FromString("--------->this is test2<----------");
-}
-
 //load ml model from file
 load(PyObject *self, PyObject *args)
 {
@@ -75,7 +60,7 @@ load(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    printf(">>load(), params=> compute_unit: %s, model_path: %s\n",compute_utint,model_path);
+    // printf(">>load(), params=> compute_unit: %s, model_path: %s\n",compute_utint,model_path);
     NSError *error=nil;
     NSString *_model_path=[NSString stringWithUTF8String:model_path];
 
@@ -149,9 +134,6 @@ predict(PyObject *self, PyObject *args)
     npy_intp *shape=PyArray_SHAPE(arr1);
     // printf(">>>dims: %d, type: %d, shape: (%d,%d,%d,%d)\n",PyArray_NDIM(arr1),PyArray_TYPE(arr1),shape[0],shape[1],shape[2],shape[3]);
 
-    //FIXME: try to prevent copy to improve performance
-    //FIXME: add clip and norm 0..255 (native not numpy)
-    //FIXME: add cast to uint8, check memory leaks
     NSError *error=nil;
     memcpy((float*)mlinput.dataPointer,(float*)PyArray_DATA(arr1),sizeof(float)*PyArray_SIZE(arr1));//shape[0]*shape[1]*shape[2]*shape[3]
     id<MLFeatureProvider> model_output = [mlmodel predictionFromFeatures:model_input options:options error:&error];
@@ -167,65 +149,62 @@ predict(PyObject *self, PyObject *args)
     arr_out=PyArray_SimpleNewFromData(nd,dims,NPY_FLOAT,mlresult.dataPointer);//mlresult.dataPointer
 
     //try transpose of array
-    PyArray_Dims newaxes;
-    npy_intp _dims[3]={1,2,0};
-    newaxes.ptr=_dims;
-    newaxes.len=3;
+    // PyArray_Dims newaxes;
+    // npy_intp _dims[3]={1,2,0};
+    // newaxes.ptr=_dims;
+    // newaxes.len=3;
 
-    arr_out=(PyArrayObject*)PyArray_Squeeze(arr_out);
-    arr_out=(PyArrayObject*)PyArray_Transpose(arr_out,&newaxes);
-    // PyObject *min=PyLong_FromDouble(0.0f);
-    // PyObject *max=PyLong_FromDouble(1.0f);
-    // arr_out=(PyArrayObject*)PyArray_Clip(arr_out,clip_min,clip_max,false);
-    // arr_out=(PyArrayObject*)PyArray_Cast(arr_out,NPY_INT16);
+    // arr_out=(PyArrayObject*)PyArray_Squeeze(arr_out);
+    // arr_out=(PyArrayObject*)PyArray_Transpose(arr_out,&newaxes);
+    // // PyObject *min=PyLong_FromDouble(0.0f);
+    // // PyObject *max=PyLong_FromDouble(1.0f);
+    // // arr_out=(PyArrayObject*)PyArray_Clip(arr_out,clip_min,clip_max,false);
+    // // arr_out=(PyArrayObject*)PyArray_Cast(arr_out,NPY_INT16);
     
-    // Convert result arr from model to uit8_t with clipping to 0..255
-    //get c-style array
-    PyArrayObject *arr_out_copy=(PyArrayObject*)PyArray_FromArray(arr_out, NULL, NPY_ARRAY_NOTSWAPPED|NPY_ARRAY_ENSURECOPY|NPY_ARRAY_C_CONTIGUOUS);
-    // PyArray_AsCArray(arr_out, void* ptr, npy_intp* dims, int nd, int typenum, int itemsize)
-    float* arr_src=(float*)PyArray_DATA(arr_out_copy);//PyArray_DATA PyArray_BYTES
-    npy_intp *out_shape=PyArray_SHAPE(arr_out_copy);
-    int height=out_shape[0];
-    int width=out_shape[1];
-    int channels=out_shape[2];
-    int linesize=width*channels;//w*c
-    uint8_t *buff_out=malloc(sizeof(uint8_t)*width*height*channels);
-    for(int y=0;y<height;y++){
-        for(int x=0;x<width;x++){
-                     RGBF rgbf = *((RGBF *)(arr_src + y * linesize) + x);
-                    // printf(">>rgb: (%.1f,%.1f,%.1f)",rgbf.r,rgbf.g,rgbf.b);
-                    // printf("--> (%.1f,%.1f,%.1f",arr_src[y*linesize+x][0],arr_src[y*linesize+x][1],arr_src[y*linesize+x][2]);
-                    //uit8
-                    RGBU rgbu;
-                    rgbu.r=(uint8_t)clip(rgbf.r*255.0f,0.0f,255.0f);
-                    rgbu.g=(uint8_t)clip(rgbf.g*255.0f,0.0f,255.0f);
-                    rgbu.b=(uint8_t)clip(rgbf.b*255.0f,0.0f,255.0f);
-                    *((RGBU *)(buff_out + y * linesize) + x)=rgbu;
+    // // Convert result arr from model to uit8_t with clipping to 0..255
+    // //get c-style array
+    // PyArrayObject *arr_out_copy=(PyArrayObject*)PyArray_FromArray(arr_out, NULL, NPY_ARRAY_NOTSWAPPED|NPY_ARRAY_ENSURECOPY|NPY_ARRAY_C_CONTIGUOUS);
+    // // PyArray_AsCArray(arr_out, void* ptr, npy_intp* dims, int nd, int typenum, int itemsize)
+    // float* arr_src=(float*)PyArray_DATA(arr_out_copy);//PyArray_DATA PyArray_BYTES
+    // npy_intp *out_shape=PyArray_SHAPE(arr_out_copy);
+    // int height=out_shape[0];
+    // int width=out_shape[1];
+    // int channels=out_shape[2];
+    // int linesize=width*channels;//w*c
+    // uint8_t *buff_out=malloc(sizeof(uint8_t)*width*height*channels);
+    // for(int y=0;y<height;y++){
+    //     for(int x=0;x<width;x++){
+    //                  RGBF rgbf = *((RGBF *)(arr_src + y * linesize) + x);
+    //                 // printf(">>rgb: (%.1f,%.1f,%.1f)",rgbf.r,rgbf.g,rgbf.b);
+    //                 // printf("--> (%.1f,%.1f,%.1f",arr_src[y*linesize+x][0],arr_src[y*linesize+x][1],arr_src[y*linesize+x][2]);
+    //                 //uit8
+    //                 RGBU rgbu;
+    //                 rgbu.r=(uint8_t)clip(rgbf.r*255.0f,0.0f,255.0f);
+    //                 rgbu.g=(uint8_t)clip(rgbf.g*255.0f,0.0f,255.0f);
+    //                 rgbu.b=(uint8_t)clip(rgbf.b*255.0f,0.0f,255.0f);
+    //                 *((RGBU *)(buff_out + y * linesize) + x)=rgbu;
 
-                    //float
-                    // RGBF rgbf2;
-                    // rgbf.r=255.0f;//(float)clip(rgbf.r*255.0f,0.0f,255.0f);
-                    // rgbf.g=255.0f;//(float)clip(rgbf.g*255.0f,0.0f,255.0f);
-                    // rgbf.b=255.0f;//(float)clip(rgbf.b*255.0f,0.0f,255.0f);
-                    // *((RGBF *)(buff_out + y * linesize) + x)=rgbf2;
-                    // memcpy(buff_out+y*linesize,arr_src+y*linesize,sizeof(float)*linesize);
+    //                 //float
+    //                 // RGBF rgbf2;
+    //                 // rgbf.r=255.0f;//(float)clip(rgbf.r*255.0f,0.0f,255.0f);
+    //                 // rgbf.g=255.0f;//(float)clip(rgbf.g*255.0f,0.0f,255.0f);
+    //                 // rgbf.b=255.0f;//(float)clip(rgbf.b*255.0f,0.0f,255.0f);
+    //                 // *((RGBF *)(buff_out + y * linesize) + x)=rgbf2;
+    //                 // memcpy(buff_out+y*linesize,arr_src+y*linesize,sizeof(float)*linesize);
 
-        }//for x
-    }//for y
+    //     }//for x
+    // }//for y
 
-    npy_intp __dims[3]={height,width,channels};
-    PyArrayObject *arr_out_uint8=PyArray_SimpleNewFromData(3, __dims, NPY_UINT8, (uint8_t*)buff_out);
-    PyArray_ENABLEFLAGS(arr_out_uint8, NPY_ARRAY_OWNDATA);//18ms
-    return arr_out_uint8;
-    // return arr_out;
+    // npy_intp __dims[3]={height,width,channels};
+    // PyArrayObject *arr_out_uint8=PyArray_SimpleNewFromData(3, __dims, NPY_UINT8, (uint8_t*)buff_out);
+    // PyArray_ENABLEFLAGS(arr_out_uint8, NPY_ARRAY_OWNDATA);//18ms
+    // return arr_out_uint8;
+    return arr_out;
 }//predict
 
 static PyMethodDef MyCoremlMethods[] = {
-    {"test",  test, METH_VARARGS,"Execute a shell command."},
-    {"test2",  test2, METH_VARARGS,"Execute a shell command 2."},
     {"load",  load, METH_VARARGS,"Load model from file"},
     {"predict",  predict, METH_VARARGS,"Predict on model"},
-
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

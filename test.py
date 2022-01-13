@@ -5,13 +5,7 @@ import numpy as np
 import mycoreml
 print(">>>started, python version: %s, time: %.3f"%(sys.version,time.time()))
 
-status = mycoreml.test("ls -l")
 
-print(">>STATUS:",status)
-
-status2 = mycoreml.test2("ls -l")
-
-print(">>STATUS2:",status2)
 
 mycoreml.load("/Users/hetzner/Documents/test-coreml/ModelCoreMl_autoencoder_compiled/ModelCoreMl_autoencoder.mlmodelc","ALL")#precompiled model
 # mycoreml.load("/Users/hetzner/Documents/test-coreml/ModelCoreMl_autoencoder.mlmodel","ALL")
@@ -31,13 +25,13 @@ for i in range(20):
     result=mycoreml.predict(img,0,1)
     print("predict result shape:",result.shape,result.dtype)
     # print(result)
-    # result=np.squeeze(result)
-    # result=np.transpose(result,(1,2,0))
-    # result=result*255
-    # result=result.clip(0,255).astype(np.uint8)#2-3ms
-    # result=result.astype(np.uint8)
-    # img_buff[1024:1024+944,1024:1024+944]=result[40:40+944,40:40+944,]
+    result=np.squeeze(result)
+    result=np.transpose(result,(1,2,0))
+    result=result*255
+    result=result.clip(0,255).astype(np.uint8)#2-3ms
+    result=result.astype(np.uint8)
+    img_buff[1024:1024+944,1024:1024+944]=result[40:40+944,40:40+944]# testcoping of data
     print(">>predict time: %.3fs:"%(time.time()-start_time))
 # print(">>result after:",result.shape, result)
 
-cv2.imwrite("/Users/hetzner/Movies/out_python_custom_module.png", result)
+cv2.imwrite("/Users/hetzner/Movies/out_python_custom_module.png", img_buff)
